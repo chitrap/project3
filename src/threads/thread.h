@@ -5,10 +5,7 @@
 #include <list.h>
 #include <stdint.h>
 
-/*****************Added*****************/
 #include "synch.h"
-/* List of sleeping thread*/
-static struct list sleeping_list;
 
 /* States in a thread's life cycle. */
 enum thread_status
@@ -124,7 +121,32 @@ struct thread
    */
    struct list donor_list;
    struct list_elem donor_elem;
+
+   //For project of Userprog
+   struct thread *parent;   //keep parent thread
+   struct list files_owned_list;     //for handling file sys calls we need file list
+   int file_desc; //file discriptor
+   
+   bool load_status;
+    //this is to pass sys_exe
+   int ret_status;
+
+   bool child_create_error;
+   struct list children_data;
+   int exit_status;
   };
+
+  //Structure for child processes
+  struct child_thread_data 
+  {
+	   struct thread *thread_ref; //store thread ref
+	   tid_t tid;             // tid of child
+	   int exit_status;       //exit status 
+	   struct semaphore s;    //semaphore for communication
+	   struct list_elem elem;
+  };
+
+struct child_thread_data * thread_get_child_data(struct thread *parent, tid_t child_tid);
 
 /* If false (default), use round-robin scheduler.
    If true, use multi-level feedback queue scheduler.
@@ -162,6 +184,9 @@ void thread_set_nice (int);
 int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
 
+/*-add for project 2 */
+struct thread *thread_by_tid(tid_t tid);
+bool thread_alive (int pid);
 /* the implementation of time sleep,Added functions*/
 void thread_sleep(int64_t ticks);
 bool cmp_ticks (const struct list_elem *a, const struct list_elem *b, void * aux UNUSED);
