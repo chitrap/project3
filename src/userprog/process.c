@@ -486,7 +486,8 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
   ASSERT (pg_ofs (upage) == 0);
   ASSERT (ofs % PGSIZE == 0);
 
-  file_seek (file, ofs);
+  //file_seek (file, ofs);
+  off_t file_ofs = ofs;
   while (read_bytes > 0 || zero_bytes > 0) 
     {
       /* Calculate how to fill this page.
@@ -495,14 +496,28 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
       size_t page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;
       size_t page_zero_bytes = PGSIZE - page_read_bytes;
 
-      /* Get a page of memory. */
+      //-------------
+      off_t block_id = -1;
+      //************ Add code for sharing frames ********
+      //-------------
+
+      struct struct_page *page = NULL;
+      page = vm_add_new_page (upage, file, file_ofs, page_read_bytes,
+                              page_zero_bytes, writable, block_id);
+
+      if (page == NULL)
+       {
+        return false;
+       }
+
+      /* Get a page of memory. * /
       //-------
       //uint8_t *kpage = palloc_get_page (PAL_USER);
       uint8_t *kpage = get_frame (PAL_USER);
       if (kpage == NULL)
         return false;
 
-      /* Load this page. */
+      /* Load this page. * /
       if (file_read (file, kpage, page_read_bytes) != (int) page_read_bytes)
         {
           //----
@@ -512,7 +527,7 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
         }
       memset (kpage + page_read_bytes, 0, page_zero_bytes);
 
-      /* Add the page to the process's address space. */
+      /* Add the page to the process's address space. * /
       if (!install_page (upage, kpage, writable)) 
         {
           //---------
@@ -520,12 +535,22 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
           free_vm_frames (kpage);
           return false; 
         }
+        struct struct_frame *frame_page = NULL;
+        frame_page = vm_add_new_page(upage, file, ofs, read_bytes,
+          zero_bytes, writable);
+
+        if(frame_page == NULL){
+          free_vm_frames(frame_page);
+          return false;
+        }
 
       /* Advance. */
       read_bytes -= page_read_bytes;
       zero_bytes -= page_zero_bytes;
       upage += PGSIZE;
+      file_ofs +=PGSIZE;
     }
+    file_seek(file, ofs);
   return true;
 }
 
@@ -535,6 +560,16 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
 static bool
 setup_stack (void **esp, const char *file_name, char **save_ptr) 
 {
+
+//mapping zeroed page
+  struct struct_page *page = NULL;
+  page = vm_add_new_zeroed_page ( ((uint8_t *) PHYS_BASE) - PGSIZE, true );
+  if (page == NULL)
+   {
+    return false;
+   }
+   *esp = PHYS_BASE;
+   vm_load_new_page (page, false);
 
   uint8_t *kpage;
   bool success = false;
@@ -627,7 +662,6 @@ setup_stack (void **esp, const char *file_name, char **save_ptr)
   
   return success;
 }
-
 
 
 /* Adds a mapping from user virtual address UPAGE to kernel

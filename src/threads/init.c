@@ -117,6 +117,7 @@ main (void)
   //---
   //Adding for VM
   vm_frame_init ();
+  vm_page_init ();
 #endif
 
   /* Start thread scheduler and enable interrupts. */

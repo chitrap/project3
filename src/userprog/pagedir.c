@@ -276,3 +276,22 @@ invalidate_pagedir (uint32_t *pd)
       pagedir_activate (pd);
     } 
 }
+
+bool
+add_page_to_pagedir(uint32_t *page_dir, void *user_page, void *struct_page){
+  uint32_t *page_table_entry;
+
+  ASSERT(pg_ofs(user_page) == 0);
+  ASSERT(is_user_vaddr(user_page));
+  ASSERT(page != init_page_dir);
+
+  page_table_entry = lookup_page(page_dir, user_page, true);
+
+  if(page_table_entry != NULL){
+    ASSERT((*page_table_entry & PTE_P));
+    *page_table_entry = (uint32_t)struct_page;
+    return true;
+  }
+  else
+    return false;
+}
