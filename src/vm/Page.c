@@ -63,3 +63,21 @@ vm_add_new_zeroed_page (void *addr, bool writable)
 	 return zero_page;
 
 }
+
+
+bool
+vm_load_new_page (struct struct_page *new_page, bool is_pinned){
+
+	lock_init(&page_load_lock);
+
+	if(new_page->type == 1 && new_page->file->block_id = -1){
+		new_page->frame_page = frame_lookup(new_page->file.block_id);
+	}
+
+	if(new_page->frame_page = NULL){
+		new_page->frame_page = get_frame(PAL_USER);
+	}
+
+	lock_release(&page_load_lock);
+	
+}

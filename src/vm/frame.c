@@ -147,3 +147,30 @@ get_frame (enum palloc_flags flags)
 
 	  return pg;
 }
+
+void *
+frame_lookup(off_t block_id)
+{
+	void *address = NULL;
+
+	struct hash_iterator hi;
+
+	lock_acquire(&frame_lock);
+	hash_first(&hi, &frames);
+	while(hash_next(&hi) && address == NULL){
+		struct struct_frame *f = NULL;
+		f = hash_entry(hash_cur(&hi), struct struct_frame, hash_elem);
+		lock_acquire(&f->llock);
+
+		struct list_elem *e = list_begin(&f->frame_pages);
+		struct struct_page *fpage = list_entry(e, struct struct_page, f_elem);
+		if(fpage->type == 1 && fpage->file.block_id== block_id){
+			address = f->address;
+		}
+
+		lock_release(&f->llock);
+	}
+
+	lock_release(&frame_lock);
+	return address;
+}

@@ -12,6 +12,9 @@ struct struct_frame
 	uint32_t *pte; //page table entry of frame's page
 	void *vaddr; //address of page
 	struct hash_elem hash_elem;
+	struct lock llock;
+	struct list frame_pages;
+	struct list_elem page_elem;
 };
 
 void vm_frame_init (void);
