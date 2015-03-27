@@ -5,6 +5,7 @@
 #include "threads/synch.h"
 
 static struct lock frame_lock;
+static struct lock eviction_lock;
 static struct hash frames;
 
 unsigned frame_hash (const struct hash_elem *, void *);
@@ -18,6 +19,7 @@ void
 vm_frame_init (void)
 {
 	lock_init (&frame_lock);
+	lock_init (&eviction_lock);
 	hash_init (&frames, frame_hash, frame_comparator, NULL);
 
 }
@@ -173,4 +175,93 @@ frame_lookup(off_t block_id)
 
 	lock_release(&frame_lock);
 	return address;
+}
+
+bool
+set_frame(void *f, struct struct_page *p){
+	struct struct_frame *frame = find_frame(f);
+	if(frame == NULL){
+		return false;
+	}
+
+	lock_acquire(&frame_lock);
+	list_push_back(&frame->frame_pages, &p->f_elem);
+	lock_release(&frame_lock);
+	return true;
+}
+
+void
+free_frame(void *address, uint32_t *page_dir){
+	lock_acquire(&eviction_lock);
+	struct struct_frame *f = find_frame(address);
+	struct list_elem *e;
+
+	if(f == NULL){
+		lock_release(&eviction_lock);
+		return;
+	}
+
+	if(page_dir == NULL){
+		lock_acquire(&f->llock);
+		while(!list_empty(&f->frame_pages)){
+			e = list_begin(&f->frame_pages);
+			struct struct_page *p = list_entry(e, struct struct_page, f_elem);
+			list_remove(&p->f_elem);
+			vm_unload(p, &f->vaddr);
+		}
+		lock_release(&f->llock);
+	}
+	else{
+		struct struct_page *p = get_page_from_frame(address, page_dir);
+		if(p !=NULL){
+			lock_acquire (&f->llock);
+          	list_remove (&p->f_elem);
+          	lock_release (&f->llock);
+         	vm_unload (p, f->vaddr);
+		}
+	}
+
+	if(!list_empty(&f->frame_pages)){
+		delete_frame(f);
+		palloc_free_page(address);
+	}
+
+	lock_release(&eviction_lock);
+}
+
+void
+pin(void *address){
+	struct struct_frame *f = find_frame(address);
+	f(f != NULL){
+		f->pin = 1;
+	}
+}
+
+void
+unpin(void *address){
+	struct struct_frame *f = find_frame(address);
+	f(f != NULL){
+		f->pin = 0;
+	}
+}
+
+struct struct_page*
+get_page_from_frame(void *f, uint32_t *page_dir){
+	struct struct_frame *f = find_frame(f);
+	struct list_elem *e;
+
+	if(f == NULL){
+		return NULL;
+	}
+
+	lock_acquire(&f->llock);
+	for(e=list_begin(&f->frame_pages); e!=list_end(&f->frame_pages) e=list_next(e)){
+		struct struct_page *p = list_entry(e, struct struct_page, f_elem);
+		if(p->pointer_to_pagedir == page_dir){
+			lock_release(&f->llock);
+			return p;
+		}
+	}
+	lock_release(&f->llock);
+	return NULL;
 }

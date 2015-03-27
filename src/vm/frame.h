@@ -15,6 +15,7 @@ struct struct_frame
 	struct lock llock;
 	struct list frame_pages;
 	struct list_elem page_elem;
+	int pin;
 };
 
 void vm_frame_init (void);

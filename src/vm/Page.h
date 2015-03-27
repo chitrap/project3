@@ -20,5 +20,10 @@
 			off_t block_id;
 		} file;
 
+		struct
+		{
+			size_t swap_index;
+		}swap;
+
 	};
 #endif
