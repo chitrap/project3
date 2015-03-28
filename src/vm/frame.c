@@ -18,6 +18,12 @@ unsigned frame_hash (const struct hash_elem *, void *);
 bool frame_comparator (const struct hash_elem *, const struct hash_elem *, void *);
 static bool delete_frame (void *);
 static struct struct_frame *find_frame (void *);
+static bool delete_frame (void *pg);
+static struct struct_frame * find_frame (void *pg);
+static bool add_frame (void *pg);
+static bool find_page_to_evict(struct struct_frame *f);
+static void move_to_next_eviction(void);
+static void remove_evict_pointer(struct struct_frame *frame_to_evict);
 
 //Initializes frames hash, called from threads/init.c
 //from main function
@@ -325,6 +331,19 @@ find_page_to_evict(struct struct_frame *f){
 	return true;
 }
 
+static struct struct_frame*
+get_next_page_for_eviction(void){
+	if(next_to_evict == NULL || next_to_evict == list_end(&list_of_frames)){
+		next_to_evict = list_begin(&list_of_frames);
+	}
+
+	if(next_to_evict != NULL){
+		struct struct_frame *f = list_entry (next_to_evict, struct struct_frame, f_elem);
+      	return f;
+	}
+
+	NOT_REACHED();
+}
 
 static void
 circular_evict(){
@@ -350,20 +369,6 @@ circular_evict(){
 	free_frame(frame_to_evict->vaddr, NULL);
 }
 
-
-static struct struct_frame*
-get_next_page_for_eviction(void){
-	if(next_to_evict == NULL || next_to_evict == list_end(&list_of_frames)){
-		next_to_evict = list_begin(&list_of_frames);
-	}
-
-	if(next_to_evict != NULL){
-		struct struct_frame *f = list_entry (next_to_evict, struct struct_frame, f_elem);
-      	return f;
-	}
-
-	NOT_REACHED();
-}
 
 static void
 move_to_next_eviction(void){
