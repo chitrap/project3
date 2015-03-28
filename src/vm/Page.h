@@ -1,12 +1,17 @@
 #ifndef VM_PAGE_H
 #define VM_PAGE_H
 	
+#include <list.h>
+#include <stdbool.h>
+#include "filesys/file.h"
+#include <stddef.h>
+
 	struct struct_page
 	{
 		int type; //0-zeroed, 1-File, 2-swap
 		bool is_page_loaded;
 		bool is_writable;
-		void *addr;
+		void *address;
 		void *frame_page;
 		uint32_t *pointer_to_pagedir;
 		struct list_elem f_elem;

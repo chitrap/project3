@@ -10,7 +10,7 @@
 static struct block *s_block;
 static struct lock s_lock;
 
-static struct bitmap s_map;
+static struct bitmap *s_map;
 static unsigned s_size;
 
 void
@@ -18,8 +18,8 @@ init_swap(){
 	s_block = block_get_role(BLOCK_SWAP);
 	lock_init(&s_lock);
 
-	sp_size = block_size (s_block); 
-  	sp_map = bitmap_create (s_size);
+	s_size = block_size (s_block); 
+  s_map = bitmap_create (s_size);
 }
 
 size_t

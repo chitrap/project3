@@ -1,12 +1,17 @@
 #include "vm/frame.h"
 #include <stdio.h>
 #include "userprog/syscall.h"
+#include "userprog/pagedir.h"
 #include "threads/malloc.h"
 #include "threads/synch.h"
 
 static struct lock frame_lock;
 static struct lock eviction_lock;
 static struct hash frames;
+
+//frames list
+static struct list frames_list;
+static struct list_elem *e_next;
 
 unsigned frame_hash (const struct hash_elem *, void *);
 bool frame_comparator (const struct hash_elem *, const struct hash_elem *, void *);
@@ -92,6 +97,8 @@ find_frame (void *pg)
 
 }
 
+//------
+/*
 //Maps User virtual page to frame of vm by help of pte
 bool
 upage_to_frame_mapping (void *frame, uint32_t *pte, void *vaddr)
@@ -106,6 +113,8 @@ upage_to_frame_mapping (void *frame, uint32_t *pte, void *vaddr)
 
 	 return true;
 }
+*/
+//------
 
 //Adds frame to Hash by allocating memory
 static bool
@@ -136,8 +145,23 @@ get_frame (enum palloc_flags flags)
 	void *pg = palloc_get_page (flags);
 	if (pg != NULL)
 	 {
-	 	add_frame (pg);
-	 	find_frame (pg);
+	 	struct struct_frame *vf;
+	 	vf = (struct struct_frame *) malloc (sizeof (struct struct_frame));
+	 	
+	 	if (vf  == NULL)
+	 	 {
+	 	 	return false;
+	 	 }
+	 	 vf->page = pg;
+	 	 //pinn this frame so it can not evict before
+	 	 //caller loads data on it
+	 	 vf->pin = 1;
+	 	 list_init (&vf->frame_pages);
+	 	 lock_init (&vf->llock);
+	 	 lock_acquire (&frame_lock);
+	 	 list_push_back (&frames_list, &vf->page_elem);
+	 	 hash_insert (&frames, &vf->hash_elem);
+	 	 lock_release (&frame_lock);
 	 }
 	 else
 	  {
@@ -177,6 +201,7 @@ frame_lookup(off_t block_id)
 	return address;
 }
 
+//Mapping for page to frame
 bool
 set_frame(void *f, struct struct_page *p){
 	struct struct_frame *frame = find_frame(f);
@@ -184,9 +209,9 @@ set_frame(void *f, struct struct_page *p){
 		return false;
 	}
 
-	lock_acquire(&frame_lock);
+	lock_acquire(&frame->llock);
 	list_push_back(&frame->frame_pages, &p->f_elem);
-	lock_release(&frame_lock);
+	lock_release(&frame->llock);
 	return true;
 }
 
@@ -205,9 +230,9 @@ free_frame(void *address, uint32_t *page_dir){
 		lock_acquire(&f->llock);
 		while(!list_empty(&f->frame_pages)){
 			e = list_begin(&f->frame_pages);
-			struct struct_page *p = list_entry(e, struct struct_page, f_elem);
+			struct struct_page *p = list_entry (e, struct struct_page, f_elem);
 			list_remove(&p->f_elem);
-			vm_unload(p, &f->vaddr);
+			vm_unload(p, f->page);
 		}
 		lock_release(&f->llock);
 	}
@@ -217,7 +242,7 @@ free_frame(void *address, uint32_t *page_dir){
 			lock_acquire (&f->llock);
           	list_remove (&p->f_elem);
           	lock_release (&f->llock);
-         	vm_unload (p, f->vaddr);
+         	vm_unload (p, f->page);
 		}
 	}
 
@@ -232,7 +257,7 @@ free_frame(void *address, uint32_t *page_dir){
 void
 pin(void *address){
 	struct struct_frame *f = find_frame(address);
-	f(f != NULL){
+	if(f != NULL){
 		f->pin = 1;
 	}
 }
@@ -240,14 +265,14 @@ pin(void *address){
 void
 unpin(void *address){
 	struct struct_frame *f = find_frame(address);
-	f(f != NULL){
+	if(f != NULL){
 		f->pin = 0;
 	}
 }
 
 struct struct_page*
-get_page_from_frame(void *f, uint32_t *page_dir){
-	struct struct_frame *f = find_frame(f);
+get_page_from_frame(void *fr, uint32_t *page_dir){
+	struct struct_frame *f = find_frame(fr);
 	struct list_elem *e;
 
 	if(f == NULL){
@@ -255,7 +280,7 @@ get_page_from_frame(void *f, uint32_t *page_dir){
 	}
 
 	lock_acquire(&f->llock);
-	for(e=list_begin(&f->frame_pages); e!=list_end(&f->frame_pages) e=list_next(e)){
+	for(e = list_begin(&f->frame_pages); e != list_end(&f->frame_pages); e = list_next(e)){
 		struct struct_page *p = list_entry(e, struct struct_page, f_elem);
 		if(p->pointer_to_pagedir == page_dir){
 			lock_release(&f->llock);

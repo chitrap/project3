@@ -140,6 +140,14 @@ file_allow_write (struct file *file)
     }
 }
 
+//Checks whether file is writable or not
+bool
+file_writable (struct file *file)
+{
+  ASSERT (file != NULL);
+  return file->deny_write;
+}
+
 /* Returns the size of FILE in bytes. */
 off_t
 file_length (struct file *file) 

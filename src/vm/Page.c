@@ -1,12 +1,20 @@
 #include "vm/Page.h"
+#include <debug.h>
+#include <inttypes.h>
+#include <round.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
+#include "threads/thread.h"
+#include "threads/vaddr.h"
+#include "userprog/pagedir.h"
+#include "userprog/syscall.h"
 #include "vm/frame.h"
 
 
 //Synchronization between load and unload of pages
-static struct page_load_lock;
-static struct page_unload_lock;
+static struct lock page_load_lock;
+static struct lock page_unload_lock;
 
 // Initiliase page tables from init.c
 void
@@ -19,7 +27,7 @@ vm_page_init ()
 struct struct_page*
 vm_add_new_page(void *address, struct file *file_name, off_t ofs, size_t read_bytes,
 				size_t zero_bytes, bool writable){
-		struct struct_page *new_page = (struct struct_page*) malloc(size_of(struct frame_page));
+		struct struct_page *new_page = (struct struct_page *) malloc (sizeof (struct struct_page));
 
 		if(new_page == NULL){
 			return NULL;
@@ -43,10 +51,10 @@ vm_add_new_page(void *address, struct file *file_name, off_t ofs, size_t read_by
 		return new_page;
 }
 
-struct struct_page
+struct struct_page *
 vm_add_new_zeroed_page (void *addr, bool writable)
 {
-	struct struct_page *zero_page = (struct struct_page) malloc (size_of(struct struct_page));
+	struct struct_page *zero_page = (struct struct_page *) malloc (sizeof (struct struct_page));
 	if (zero_page == NULL)
 	 {
 	 	return NULL;
@@ -70,7 +78,7 @@ vm_load_new_page (struct struct_page *new_page, bool is_pinned){
 
 	lock_init(&page_load_lock);
 
-	if(new_page->type == 1 && new_page->file->block_id = -1){
+	if(new_page->type == 1 && new_page->file.block_id != -1){
 		new_page->frame_page = frame_lookup(new_page->file.block_id);
 	}
 
@@ -84,17 +92,17 @@ vm_load_new_page (struct struct_page *new_page, bool is_pinned){
 	bool flag = true;
 
 	if(new_page->type == 1){
-		sys_t_filelock(true);
+		//----put lock here to sync this block
 		file_seek(new_page->file.file_name, new_page->file.ofs);
-		size_t bytes_read = file_read(new_page->file.file_name, new_page->frame_page, new_page->fram_page.read_bytes);
-		sys_t_filelock(false);
+		size_t bytes_read = file_read(new_page->file.file_name, new_page->frame_page, new_page->file.read_bytes);
+		//-----remove lock from here
 
 		if(bytes_read != new_page->file.read_bytes){
-			free_frame(page->frame_page, new_page->pointer_to_pagedir);
+			free_frame(new_page->frame_page, new_page->pointer_to_pagedir);
 			flag = false;
 		}
 		if(flag){
-			memset (frame_page + new_page->file.read_bytes, 0, new_page->file.zero_bytes);
+			memset (new_page->frame_page + new_page->file.read_bytes, 0, new_page->file.zero_bytes);
   		}
 	}
 	else if(new_page->type == 0){
@@ -110,16 +118,16 @@ vm_load_new_page (struct struct_page *new_page, bool is_pinned){
 		return false;
 	}
 
-	pagedir_clear_page(new_page->pointer_to_pagedir, new_page->addr);
-	if (!pagedir_set_page (new_page->pointer_to_pagedir, new_page->addr, new_page->frame_page, new_page->is_writable))
+	pagedir_clear_page(new_page->pointer_to_pagedir, new_page->address);
+	if (!pagedir_set_page (new_page->pointer_to_pagedir, new_page->address, new_page->frame_page, new_page->is_writable))
     {
       ASSERT (false);
-      unpin (page->frame_page);
+      unpin (new_page->frame_page);
       return false;
     }
 
-  	pagedir_set_dirty (new_page->pointer_to_pagedir, new_page->addr, false);
-  	pagedir_set_accessed (new_page->pointer_to_pagedir, new_page->addr, true);
+  	pagedir_set_dirty (new_page->pointer_to_pagedir, new_page->address, false);
+  	pagedir_set_accessed (new_page->pointer_to_pagedir, new_page->address, true);
 
   	new_page->is_page_loaded = true;
 
@@ -129,25 +137,53 @@ vm_load_new_page (struct struct_page *new_page, bool is_pinned){
 }
 
 void
-vm_unload(struct struct_page *p, void fpage){
-	lock_acquire(&page_unload_lock);
-	if(&p->type == 1 && pagedir_is_dirty(p->pointer_to_pagedir, p->addr) && file_writable(p->file.file_name) == false){
+vm_unload(struct struct_page *p, void *fpage){
+	lock_acquire (&page_unload_lock);
+	if(&p->type == 1 && pagedir_is_dirty(p->pointer_to_pagedir, p->address) && file_writable(p->file.file_name) == false){
 		pin(fpage);
-		sys_t_filelock(true);
+		//---for sync put lock here
 		file_seek(p->file.file_name, p->file.ofs);
 		file_write(p->file.file_name, fpage, p->file.read_bytes);
-		sys_t_filelock(false);
+		//---remove lock from here
 		unpin(fpage);
 	}
-	else if(&p->type == 2 || pagedir_is_dirty(p->pointer_to_pagedir, p->addr)){
+	else if(&p->type == 2 || pagedir_is_dirty(p->pointer_to_pagedir, p->frame_page)){
 		p->type = 2;
 		p->swap.swap_index = store_swap_page(fpage);
 	}
 	lock_release(&page_unload_lock);
 
-	pagedir_clear_page(p->pointer_to_pagedir, p->addr);
-	pagedir_add_page(p->pointer_to_pagedir, p->addr, (void *)p);
+	pagedir_clear_page (p->pointer_to_pagedir, p->address);
+	add_page_to_pagedir (p->pointer_to_pagedir, p->address, (void *)p);
 	p->is_page_loaded = false;
 	p->frame_page = NULL;
 }
 
+struct struct_page*
+vm_find_page_in_supplemental_table (void *addr)
+{
+	uint32_t *pagedir = thread_current ()->pagedir;
+	struct struct_page *page = NULL;
+	page = (struct struct_page *) find_page_in_pagedir (pagedir, (const void *) addr);
+	return page;
+}
+
+//check whether address is in user space and in range of 32
+//bytes from stack pointer
+bool
+is_stack_access_vaid (const void *esp, void *addr)
+{
+	return (uint32_t) addr > 0 && addr >= (esp-32) &&
+			(PHYS_BASE - pg_round_down (addr)) <= (1<<23);
+}
+
+struct struct_page *
+vm_add_zeroed_page_on_stack (void *vaddr, bool pinned)
+{
+	struct struct_page *page = vm_add_new_zeroed_page (vaddr, true);
+	if (!vm_load_new_page(page, pinned))
+	 {
+	 	return NULL;
+	 }
+	 return page;
+}

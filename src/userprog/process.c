@@ -575,6 +575,7 @@ setup_stack (void **esp, const char *file_name, char **save_ptr)
   bool success = false;
 
 //--------
+  /*
   //kpage = palloc_get_page (PAL_USER | PAL_ZERO);
   kpage = get_frame (PAL_USER | PAL_ZERO);
   if (kpage != NULL) 
@@ -589,7 +590,8 @@ setup_stack (void **esp, const char *file_name, char **save_ptr)
         free_vm_frames (kpage);
       }
     }
-  
+    */
+  //----------
   const void *user_stack_bottom = *esp - PGSIZE;
   char *token;
   int length_token = 0;

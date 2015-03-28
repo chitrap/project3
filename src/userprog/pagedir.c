@@ -126,7 +126,7 @@ pagedir_set_page (uint32_t *pd, void *upage, void *kpage, bool writable)
       //Kpage => frame
       //pte => page table
       //upage =>user addr
-      upage_to_frame_mapping (kpage, pte, upage);
+      //upage_to_frame_mapping (kpage, pte, upage);
       return true;
     }
   else
@@ -283,15 +283,41 @@ add_page_to_pagedir(uint32_t *page_dir, void *user_page, void *struct_page){
 
   ASSERT(pg_ofs(user_page) == 0);
   ASSERT(is_user_vaddr(user_page));
-  ASSERT(page != init_page_dir);
+  ASSERT(page_dir != init_page_dir);
 
   page_table_entry = lookup_page(page_dir, user_page, true);
 
   if(page_table_entry != NULL){
-    ASSERT((*page_table_entry & PTE_P));
+    ASSERT((*page_table_entry & PTE_P) == 0);
     *page_table_entry = (uint32_t)struct_page;
     return true;
   }
   else
     return false;
+}
+
+//looks for physical address for virtual address
+void *
+find_page_in_pagedir (uint32_t *pagedir, const void *uaddr)
+{
+  uint32_t *page_table_entry;
+
+  ASSERT(is_user_vaddr(uaddr));
+  page_table_entry = lookup_page (pagedir, uaddr, false);
+
+  if (page_table_entry != NULL)
+   {
+    if ((*page_table_entry & PTE_P) != 0)
+     {
+      void *page = pte_get_page (*page_table_entry) + 
+                   pg_ofs (uaddr);
+      return get_page_from_frame (page, pagedir);                   
+     }
+     else
+      {
+        return *page_table_entry !=0 ? (void *)*page_table_entry : NULL;
+      }
+   }
+   else
+    return NULL;
 }

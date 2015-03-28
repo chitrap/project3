@@ -12,8 +12,8 @@ struct struct_frame
 	uint32_t *pte; //page table entry of frame's page
 	void *vaddr; //address of page
 	struct hash_elem hash_elem;
-	struct lock llock;
-	struct list frame_pages;
+	struct lock llock; //lock for sync access to frame_pages list
+	struct list frame_pages; //list of pages sharing same frame
 	struct list_elem page_elem;
 	int pin;
 };

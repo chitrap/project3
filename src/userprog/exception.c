@@ -5,6 +5,9 @@
 #include "userprog/gdt.h"
 #include "threads/interrupt.h"
 #include "threads/thread.h"
+#include "threads/pte.h"
+#include "vm/Page.h"
+#include "vm/frame.h"
 
 /* Number of page faults processed. */
 static long long page_fault_cnt;
@@ -129,6 +132,8 @@ page_fault (struct intr_frame *f)
   bool write;        /* True: access was write, false: access was read. */
   bool user;         /* True: access by user, false: access by kernel. */
   void *fault_addr;  /* Fault address. */
+  void *fault_page;  /* Fault page */
+  struct struct_page *page; 
 
   /* Obtain faulting address, the virtual address that was
      accessed to cause the fault.  It may point to code or to
@@ -151,6 +156,47 @@ page_fault (struct intr_frame *f)
   write = (f->error_code & PF_W) != 0;
   user = (f->error_code & PF_U) != 0;
 
+  //Get kernel address in user mode
+  if (user && !is_user_vaddr (fault_addr))
+   {
+    sys_exit (-1);
+   }
+
+   //Get fault page
+   fault_page = (void *) (PTE_ADDR & (uint32_t) fault_addr);
+
+   //Find page in supplemental page table
+   page = vm_find_page_in_supplemental_table (fault_page);
+
+   //If writing on read-only page then exit
+   if (page != NULL && write && !page->is_writable)
+   {
+      sys_exit (-1);
+   }
+
+   if (page != NULL)
+    {
+      if (!vm_load_new_page (page, false))
+       {
+        sys_exit (-1);
+       }
+       return;
+    }
+    else if (is_stack_access_vaid (f->esp, fault_addr))
+     {
+        if (!vm_add_zeroed_page_on_stack (fault_page, false))
+         {
+          sys_exit (-1);
+         }
+         return;
+     }
+     else if (user || not_present)
+      {
+        sys_exit (-1);
+      }
+
+      f->eip = (void *) f->eax;
+      f->eax = 0xffffffff;
 
   /* To implement virtual memory, delete the rest of the function
      body, and replace it with code that brings in the page to
