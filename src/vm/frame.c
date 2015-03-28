@@ -4,14 +4,15 @@
 #include "userprog/pagedir.h"
 #include "threads/malloc.h"
 #include "threads/synch.h"
+#include "vm/Page.h"
 
 static struct lock frame_lock;
 static struct lock eviction_lock;
 static struct hash frames;
 
 //frames list
-static struct list frames_list;
-static struct list_elem *e_next;
+static struct list list_of_frames;
+static struct list_elem *next_to_evict;
 
 unsigned frame_hash (const struct hash_elem *, void *);
 bool frame_comparator (const struct hash_elem *, const struct hash_elem *, void *);
@@ -26,9 +27,43 @@ vm_frame_init (void)
 	lock_init (&frame_lock);
 	lock_init (&eviction_lock);
 	hash_init (&frames, frame_hash, frame_comparator, NULL);
+	list_init (&list_of_frames);
 
 }
 
+struct struct_page*
+get_page_from_frame(void *fr, uint32_t *page_dir){
+	struct struct_frame *f = find_frame(fr);
+	struct list_elem *e;
+
+	if(f == NULL){
+		return NULL;
+	}
+
+	lock_acquire(&f->llock);
+	for(e = list_begin(&f->frame_pages); e != list_end(&f->frame_pages); e = list_next(e)){
+		struct struct_page *p = list_entry(e, struct struct_page, f_elem);
+		if(p->pointer_to_pagedir == page_dir){
+			lock_release(&f->llock);
+			return p;
+		}
+	}
+	lock_release(&f->llock);
+	return NULL;
+}
+
+bool
+set_page_in_frame(void *f, struct struct_page *p){
+	struct struct_frame *frame = find_frame(f);
+	if(f == NULL){
+		return false;
+	}
+
+	lock_acquire(&frame->llock);
+	list_push_back(&frame->frame_pages, &p->f_elem);
+	lock_release(&frame->llock);
+	return true;
+}
 
 //returns hash value for frame e
 unsigned frame_hash (const struct hash_elem *e_, void *aux UNUSED)
@@ -71,7 +106,9 @@ delete_frame (void *pg)
 	 }
 
 	 lock_acquire (&frame_lock);
+	 remove_evict_pointer(f);
 	 hash_delete (&frames, &f->hash_elem);
+	 list_remove(&f->page_elem);
 	 free (f);
 	 lock_release (&frame_lock);
 
@@ -168,7 +205,9 @@ get_frame (enum palloc_flags flags)
 	  	#ifndef vm
 	  		sys_exit (-1);
 	  	#endif
-	  	PANIC ("Eviction needed !");	
+	  	//PANIC ("Eviction needed !");	
+	  	circular_evict ();
+    	return get_frame (flags);
 	  }
 
 	  return pg;
@@ -270,23 +309,76 @@ unpin(void *address){
 	}
 }
 
-struct struct_page*
-get_page_from_frame(void *fr, uint32_t *page_dir){
-	struct struct_frame *f = find_frame(fr);
+static bool
+find_page_to_evict(struct struct_frame *f){
 	struct list_elem *e;
 
-	if(f == NULL){
-		return NULL;
+	for(e=list_begin(&f->frame_pages); e != list_end(&f->frame_pages); e = list_next(e)){
+		struct struct_page *p = list_entry(e, struct struct_page, f_elem);
+
+		if (pagedir_is_accessed (p->pointer_to_pagedir, p->address) )
+        {
+          pagedir_set_accessed (p->pointer_to_pagedir, p->address, false);
+          return false;
+        }
+	}
+	return true;
+}
+
+
+static void
+circular_evict(){
+	struct struct_frame *frame_to_evict = NULL;
+
+	lock_acquire(&eviction_lock);
+	lock_acquire(&frame_lock);
+
+	while(frame_to_evict == NULL){
+		struct struct_frame *f = get_next_page_for_eviction();
+		ASSERT(f != NULL);
+
+		if(f->pin == 1 || find_page_to_evict(f) == false){
+				move_to_next_eviction();
+				continue;
+		}
+
+		frame_to_evict = f;
 	}
 
-	lock_acquire(&f->llock);
-	for(e = list_begin(&f->frame_pages); e != list_end(&f->frame_pages); e = list_next(e)){
-		struct struct_page *p = list_entry(e, struct struct_page, f_elem);
-		if(p->pointer_to_pagedir == page_dir){
-			lock_release(&f->llock);
-			return p;
-		}
+	lock_release(&frame_lock);
+	lock_release(&eviction_lock);
+	free_frame(frame_to_evict->vaddr, NULL);
+}
+
+
+static struct struct_frame*
+get_next_page_for_eviction(void){
+	if(next_to_evict == NULL || next_to_evict == list_end(&list_of_frames)){
+		next_to_evict = list_begin(&list_of_frames);
 	}
-	lock_release(&f->llock);
-	return NULL;
+
+	if(next_to_evict != NULL){
+		struct struct_frame *f = list_entry (next_to_evict, struct struct_frame, f_elem);
+      	return f;
+	}
+
+	NOT_REACHED();
+}
+
+static void
+move_to_next_eviction(void){
+	if (next_to_evict == NULL || next_to_evict == list_end (&list_of_frames) )
+    	next_to_evict = list_begin (&list_of_frames);
+  	else
+    	next_to_evict = list_next (next_to_evict); 
+}
+
+static void
+remove_evict_pointer(struct struct_frame *frame_to_evict){
+	if (next_to_evict == NULL || next_to_evict == list_end (&list_of_frames) )
+		return;
+	struct struct_frame *f = list_entry (next_to_evict, struct struct_frame, page_elem);
+
+	if (f == frame_to_evict)
+		move_to_next_eviction ();
 }
