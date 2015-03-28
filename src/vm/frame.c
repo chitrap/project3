@@ -196,7 +196,7 @@ get_frame (enum palloc_flags flags)
 	 	 list_init (&vf->frame_pages);
 	 	 lock_init (&vf->llock);
 	 	 lock_acquire (&frame_lock);
-	 	 list_push_back (&frames_list, &vf->page_elem);
+	 	 list_push_back (&list_of_frames, &vf->page_elem);
 	 	 hash_insert (&frames, &vf->hash_elem);
 	 	 lock_release (&frame_lock);
 	 }
@@ -230,7 +230,7 @@ frame_lookup(off_t block_id)
 		struct list_elem *e = list_begin(&f->frame_pages);
 		struct struct_page *fpage = list_entry(e, struct struct_page, f_elem);
 		if(fpage->type == 1 && fpage->file.block_id== block_id){
-			address = f->address;
+			address = f->vaddr;
 		}
 
 		lock_release(&f->llock);
