@@ -16,6 +16,8 @@
 static struct lock page_load_lock;
 static struct lock page_unload_lock;
 
+static int count = 0;
+
 // Initiliase page tables from init.c
 void
 vm_page_init ()
@@ -26,7 +28,7 @@ vm_page_init ()
 
 struct struct_page*
 vm_add_new_page(void *address, struct file *file_name, off_t ofs, size_t read_bytes,
-				size_t zero_bytes, bool writable){
+				size_t zero_bytes, bool writable, off_t block_id){
 		struct struct_page *new_page = (struct struct_page *) malloc (sizeof (struct struct_page));
 
 		if(new_page == NULL){
@@ -40,7 +42,7 @@ vm_add_new_page(void *address, struct file *file_name, off_t ofs, size_t read_by
 		new_page->file.ofs = ofs;
 		new_page->file.read_bytes = read_bytes;
 		new_page->file.zero_bytes = zero_bytes;
-		//new_page->file.block_id = block_id;
+		new_page->file.block_id = block_id;
 		new_page->is_writable = writable;
 		new_page->is_page_loaded = false;
 		new_page->frame_page = NULL;
@@ -186,4 +188,18 @@ vm_add_zeroed_page_on_stack (void *vaddr, bool pinned)
 	 	return NULL;
 	 }
 	 return page;
+}
+
+void
+vm_free_this_page(struct struct_page *page){
+	if(page == NULL){
+		return;
+	}
+
+	if(page->type == 2 && page->is_page_loaded == false)
+		free_swap_page (page->swap_data.index);
+
+  pagedir_clear_page (page->pointer_to_pagedir, page->addr);
+  free (page);
+  --count;
 }

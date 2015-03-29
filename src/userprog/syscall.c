@@ -412,10 +412,121 @@ syscall_handler (struct intr_frame *f UNUSED)
 		 	sys_close(arg[0]);
 		 	break;
 		 } 
+		 case SYS_MMAP:
+		 {
+		 	get_arguments_from_stack(f, &arg[0], 2);
+		 	sys_mmap((int) args[0], (void *)args[1]);
+		 	break;
+		 }
+		 case SYS_MUNMAP:
+		 {
+		 	get_arguments_from_stack(f, &args[0], 1);
+		 	sys_munmap((mapid_t) args[0]);
+		 	break;
+		 }
 
 	}
   
 }
+
+
+mapid_t
+sys_mmap(int fd, void* addr){
+
+	size_t s;
+	struct file *f;
+	s = sys_filesize(fd);
+	lock_acquire(&file_lock);
+	f = file_reopen(get_file_handle(fd));
+	lock_release(&file_lock);
+
+	/* Check for validity.*/
+  	if (s <= 0 || f == NULL)
+    	return -1;
+  	if (addr == NULL || addr == 0x0 || pg_ofs (addr) != 0)
+    	return -1;
+  	if (fd == STDIN_FILENO || fd == STDOUT_FILENO)
+    	return -1;
+
+  size_t ofs = 0;
+  void *addr_tmp = addr;
+
+  /* Divide the file into pages and create a new file page
+     with the corresponding offset for each of them. */
+  while (s > 0)
+    {
+      size_t read_bytes;
+      size_t zero_bytes;
+      
+      if (s >= PGSIZE)
+        {
+          read_bytes = PGSIZE;
+          zero_bytes = 0;
+        }
+      else
+        {
+          read_bytes = size;
+          zero_bytes = PGSIZE - size;
+        }
+  
+      /* Fail if there is already a mapped page at the same address. */
+      if ( vm_find_page_in_supplemental_table (addr_tmp) != NULL)
+          return -1;
+      
+      vm_add_new_page (addr_tmp, f, ofs, read_bytes, zero_bytes, true, -1);
+      
+      ofs += PGSIZE;
+      s -= read_bytes;
+      addr_tmp += PGSIZE;
+    }
+
+  mapid_t mapid = assing_mapid();
+  mmap_insert_by_mapid (mapid, fd, addr, tmp_addr);
+
+  return mapid;
+
+}
+
+static mapid_t
+assing_mapid (void)
+{
+  static mapid_t mapid = 0;
+  return mapid++;
+}
+
+/*Unmaps a files.*/
+void
+sys_munmap (mapid_t mapid)
+{
+  struct struct_mmap *mmap = mmap_find_by_mapid (mapid);
+  if (mf == NULL)
+    sys_exit (-1);
+
+  void *address = mmap->start_addr;
+
+  /* Free each page mapped in memory for the given file. */
+  for (;address < mmap->end_addr; address += PGSIZE)
+    {
+      struct struct_page *p = NULL;
+
+      p = vm_find_page_in_supplemental_table (address);
+      if (p == NULL)
+        continue;
+
+      if (p->is_page_loaded == true)
+        {
+          if (p->frame_page != NULL)
+    		return;
+  		  pin (p->frame_page);
+
+          ASSERT (p->is_page_loaded && p->frame_page != NULL);
+          free_frame (p->frame_page, p->pointer_to_pagedir);
+        } 
+      vm_free_this_page (page);
+    }
+  mmap_delete_by_mapid(mapid);
+}
+
 
 //get arguments from stack
 void

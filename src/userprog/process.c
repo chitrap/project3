@@ -537,7 +537,7 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
         }
         struct struct_frame *frame_page = NULL;
         frame_page = vm_add_new_page(upage, file, ofs, read_bytes,
-          zero_bytes, writable);
+          zero_bytes, writable, block_id);
 
         if(frame_page == NULL){
           free_vm_frames(frame_page);

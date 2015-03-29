@@ -343,3 +343,8 @@ inode_length (const struct inode *inode)
 {
   return inode->data.length;
 }
+
+off_t
+inode_get_block_number(const struct inode *inode, off_t offset){
+  return byte_to_sector(inode, offset);
+}
