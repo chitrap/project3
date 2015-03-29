@@ -43,6 +43,7 @@ struct child_process* add_child (int pid);
 void validate_ptr (const void *addr);
 void close_all_files (void);
 static mapid_t assing_mapid (void);
+static void *esp_value;
 
 //File structre
 struct file_struct
@@ -108,13 +109,14 @@ sys_halt (void)
 void
 sys_exit (int status)
 {
-	struct thread *current = thread_current();	
+	struct thread *current = thread_current();
+	struct list_elem *e;	
 	//current->chp->status = status; 
     	current->exit_status = status;
 	thread_get_child_data(current->parent, current->tid)->exit_status=current->exit_status;
-        while (!list_empty (&t->mfiles) )
+        while (!list_empty (&current->mmap_files) )
         {
-           e = list_begin (&t->mfiles);
+           e = list_begin (&current->mmap_files);
            sys_munmap ( list_entry (e, struct struct_mmap, thread_elem)->mapid );
         } 
 	thread_exit();	 
@@ -178,6 +180,7 @@ sys_seek (int file_desc, unsigned offset)
 int
 sys_read (int file_desc, char *buf, unsigned s)
 {
+	const void *esp = (const void *)esp_value;
 	validate_ptr (buf);
 	validate_page (buf);
         int ret = 0; 
@@ -191,11 +194,11 @@ sys_read (int file_desc, char *buf, unsigned s)
 		 		 	return s; 
 		 		 }
 		 }
-        lock_acquire (&file_lock);	
+        //lock_acquire (&file_lock);	
 	struct file* file_ptr = get_file_handle (file_desc);
 	if (file_ptr == NULL)
 	{
-		lock_release (&file_lock);
+		//lock_release (&file_lock);
 		return -1;
 	}
 	else
@@ -205,7 +208,7 @@ sys_read (int file_desc, char *buf, unsigned s)
              underlying frame. We have to prevent a page fault while a device
              driver access a user driver. Loading one page at a time protects
              the OS from malicious programs that could try to pin all the 
-             frames at a given time. */
+             frames at a give n time. */
 
           size_t rem = s;
           void *tmp_buffer = (void *)buf;
@@ -231,7 +234,7 @@ sys_read (int file_desc, char *buf, unsigned s)
 
               size_t read_bytes = ofs + rem > PGSIZE ?
                                   rem - (ofs + rem - PGSIZE) : rem;
-              //lock_acquire (&file_lock);
+              lock_acquire (&file_lock);
 
               ASSERT (page->is_page_loaded);
               ret += file_read (file_ptr->file, tmp_buffer, read_bytes);
@@ -245,7 +248,7 @@ sys_read (int file_desc, char *buf, unsigned s)
             }
 	}
 	//off_t bytes_read = file_read (file_ptr, buf, s);
-	lock_release (&file_lock);
+	//lock_release (&file_lock);
 	//return bytes_read;
         return ret;
 }
@@ -347,6 +350,7 @@ sys_open (const char *file)
 static int
 sys_write (int file_desc, const void *buffer, unsigned size)
 {
+	const void *esp = (const void *)esp_value;
 	//printf("write 1\n");
 	validate_ptr (buffer);
 	validate_page (buffer);
@@ -364,19 +368,51 @@ sys_write (int file_desc, const void *buffer, unsigned size)
 	 	return size;
 	 }
 
-	 lock_acquire (&file_lock);
+	 
 	 struct file *file_ptr = get_file_handle (file_desc);
 	
 	 //if lock doesn't acquired then return
 	 if (file_ptr == NULL)
 	 	 {
-	 	 	lock_release (&file_lock);
+	 	 	
 	 	 	sys_exit (-1);
 	 	 }
+	 size_t rem = length;
+	 void *tmp_buffer = (void *)buffer;
+	 ret = 0;
+	 while (rem > 0)
+	  {
+	  	//page loading
+	  	size_t ofs = tmp_buffer - pg_round_down (tmp_buffer);
+	  	struct struct_page *page = vm_find_page_in_supplemental_table (tmp_buffer - ofs);
+
+	  	if (page == NULL && is_stack_access_vaid (esp, tmp_buffer))
+	  	 {
+	  	 	page = vm_add_zeroed_page_on_stack (tmp_buffer - ofs, true);
+	  	 }
+	  	 else if (page == NULL)
+	  	 	sys_exit (-1);
+
+	  	 if (!page->is_page_loaded)
+	  	  {
+	  	  	vm_load_new_page (page, true);
+	  	  }
+	  	  size_t write_bytes = ofs + rem > PGSIZE ?
+	  	  		rem - (ofs + rem - PGSIZE) : rem;
+
+	  	  lock_acquire (&file_lock);
+	  	  ASSERT (page->is_page_loaded);
+	  	  ret += file_write (file_ptr->file, tmp_buffer, write_bytes);		
+	  	  lock_release (&file_lock);
+
+	  	  rem -= write_bytes;
+	  	  tmp_buffer += write_bytes;
+	  	  unpin (page->frame_page);
+
+	  }	 
 	
-	 int bytes_wrriten = file_write (file_ptr, buffer, size);
-	 lock_release (&file_lock);
-	 return bytes_wrriten;	 
+	 
+	 return ret;	 
 }
 
 static void
@@ -388,6 +424,8 @@ syscall_handler (struct intr_frame *f UNUSED)
 	validate_ptr((const void *) f->esp);
 	validate_page((const void *) f->esp);
 	
+	//store value of esp for read and write
+	esp_value = f->esp;
 	//switch for diff system calls
 	switch(* ( int *) f->esp)
 	{
