@@ -226,7 +226,7 @@ sys_read (int file_desc, char *buf, unsigned s)
               if (page == NULL && is_stack_access_vaid (esp, tmp_buffer) )
                 page = vm_add_zeroed_page_on_stack (tmp_buffer - ofs, true);   
               else if (page == NULL)
-                sys_t_exit (-1);
+                sys_exit (-1);
 
               /* Load the page and pin the frame. */
               if ( !page->is_page_loaded )
@@ -237,7 +237,7 @@ sys_read (int file_desc, char *buf, unsigned s)
               lock_acquire (&file_lock);
 
               ASSERT (page->is_page_loaded);
-              ret += file_read (file_ptr->file, tmp_buffer, read_bytes);
+              ret += file_read (file_ptr, tmp_buffer, read_bytes);
               lock_release (&file_lock);              
 
               rem -= read_bytes;
@@ -354,6 +354,8 @@ sys_write (int file_desc, const void *buffer, unsigned size)
 	//printf("write 1\n");
 	validate_ptr (buffer);
 	validate_page (buffer);
+
+        int ret = 0;
 	if (file_desc == STDOUT_FILENO)
 	 {
 	 	int left = size;
@@ -377,7 +379,8 @@ sys_write (int file_desc, const void *buffer, unsigned size)
 	 	 	
 	 	 	sys_exit (-1);
 	 	 }
-	 size_t rem = length;
+	 else {
+	 size_t rem = size;
 	 void *tmp_buffer = (void *)buffer;
 	 ret = 0;
 	 while (rem > 0)
@@ -402,7 +405,7 @@ sys_write (int file_desc, const void *buffer, unsigned size)
 
 	  	  lock_acquire (&file_lock);
 	  	  ASSERT (page->is_page_loaded);
-	  	  ret += file_write (file_ptr->file, tmp_buffer, write_bytes);		
+	  	  ret += file_write (file_ptr, tmp_buffer, write_bytes);		
 	  	  lock_release (&file_lock);
 
 	  	  rem -= write_bytes;
@@ -411,7 +414,8 @@ sys_write (int file_desc, const void *buffer, unsigned size)
 
 	  }	 
 	
-	 
+	 }
+
 	 return ret;	 
 }
 
