@@ -20,6 +20,8 @@
 #include "threads/vaddr.h"
 #include "threads/malloc.h"
 #include "vm/frame.h"
+#include "vm/Page.h"
+#include "vm/mmap.h"
 
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp,
@@ -500,6 +502,9 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
       off_t block_id = -1;
       //************ Add code for sharing frames ********
       //-------------
+      
+      if (writable == false)
+        block_id = inode_get_block_number (file_get_inode (file), file_ofs);
 
       struct struct_page *page = NULL;
       page = vm_add_new_page (upage, file, file_ofs, page_read_bytes,
@@ -517,7 +522,7 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
       if (kpage == NULL)
         return false;
 
-      /* Load this page. * /
+      / * Load this page. * /
       if (file_read (file, kpage, page_read_bytes) != (int) page_read_bytes)
         {
           //----
@@ -527,7 +532,7 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
         }
       memset (kpage + page_read_bytes, 0, page_zero_bytes);
 
-      /* Add the page to the process's address space. * /
+      / * Add the page to the process's address space. * /
       if (!install_page (upage, kpage, writable)) 
         {
           //---------
@@ -544,7 +549,7 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
           return false;
         }
 
-      /* Advance. */
+      / * Advance. */
       read_bytes -= page_read_bytes;
       zero_bytes -= page_zero_bytes;
       upage += PGSIZE;
@@ -572,7 +577,7 @@ setup_stack (void **esp, const char *file_name, char **save_ptr)
    vm_load_new_page (page, false);
 
   uint8_t *kpage;
-  bool success = false;
+  bool success = true;
 
 //--------
   /*

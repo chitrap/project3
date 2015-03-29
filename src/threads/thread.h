@@ -99,9 +99,9 @@ struct thread
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */
-    struct list mmap_files; //list of mmap files
 #endif
 
+    struct list mmap_files; //list of mmap files
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */
    
