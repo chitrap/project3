@@ -110,8 +110,13 @@ sys_exit (int status)
 {
 	struct thread *current = thread_current();	
 	//current->chp->status = status; 
-    current->exit_status = status;
+    	current->exit_status = status;
 	thread_get_child_data(current->parent, current->tid)->exit_status=current->exit_status;
+        while (!list_empty (&t->mfiles) )
+        {
+           e = list_begin (&t->mfiles);
+           sys_munmap ( list_entry (e, struct struct_mmap, thread_elem)->mapid );
+        } 
 	thread_exit();	 
 }
 
@@ -175,7 +180,7 @@ sys_read (int file_desc, char *buf, unsigned s)
 {
 	validate_ptr (buf);
 	validate_page (buf);
-     
+        int ret = 0; 
 	if (file_desc == STDIN_FILENO)
 		 {
 		 	//read from buffer
@@ -186,16 +191,63 @@ sys_read (int file_desc, char *buf, unsigned s)
 		 		 	return s; 
 		 		 }
 		 }
-    lock_acquire (&file_lock);	
+        lock_acquire (&file_lock);	
 	struct file* file_ptr = get_file_handle (file_desc);
 	if (file_ptr == NULL)
 	{
 		lock_release (&file_lock);
 		return -1;
 	}
-	off_t bytes_read = file_read (file_ptr, buf, s);
+	else
+        {
+          /* We read into the buffer one page at a time. Before the actual 
+             read we need to make sure the page it's loaded and pin it's 
+             underlying frame. We have to prevent a page fault while a device
+             driver access a user driver. Loading one page at a time protects
+             the OS from malicious programs that could try to pin all the 
+             frames at a given time. */
+
+          size_t rem = s;
+          void *tmp_buffer = (void *)buf;
+
+          ret = 0;
+          while (rem > 0)
+            {
+              /* Round down the buffer address to a page and try to find a
+                 static page. If we don't find the page we migth have stack
+                 growth. If we find the page we only need to load if is not
+                 present in memory. */
+              size_t ofs = tmp_buffer - pg_round_down (tmp_buffer);
+              struct struct_page *page = vm_find_page_in_supplemental_table (tmp_buffer - ofs);
+              
+              if (page == NULL && is_stack_access_vaid (esp, tmp_buffer) )
+                page = vm_add_zeroed_page_on_stack (tmp_buffer - ofs, true);   
+              else if (page == NULL)
+                sys_t_exit (-1);
+
+              /* Load the page and pin the frame. */
+              if ( !page->is_page_loaded )
+                vm_load_new_page (page, true);
+
+              size_t read_bytes = ofs + rem > PGSIZE ?
+                                  rem - (ofs + rem - PGSIZE) : rem;
+              //lock_acquire (&file_lock);
+
+              ASSERT (page->is_page_loaded);
+              ret += file_read (file_ptr->file, tmp_buffer, read_bytes);
+              lock_release (&file_lock);              
+
+              rem -= read_bytes;
+              tmp_buffer += read_bytes;
+
+              /* Unpin the frame after we are done. */
+              unpin (page->frame_page);
+            }
+	}
+	//off_t bytes_read = file_read (file_ptr, buf, s);
 	lock_release (&file_lock);
-	return bytes_read;
+	//return bytes_read;
+        return ret;
 }
 
 //File size sys call, gets file handle and then returns,
