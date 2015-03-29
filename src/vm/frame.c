@@ -292,7 +292,7 @@ free_frame(void *address, uint32_t *page_dir){
 		}
 	}
 
-	if(!list_empty(&f->frame_pages)){
+	if(list_empty(&f->frame_pages)){
 		delete_frame(f);
 		palloc_free_page(address);
 	}
