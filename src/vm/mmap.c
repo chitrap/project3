@@ -37,7 +37,7 @@ mmap_init (void)
 
 //find mmap for given mapid or null
 struct struct_mmap *
-mmap_find_by_mapid (mapid mapid)
+mmap_find_by_mapid (mapid_t mapid)
 {
 	struct struct_mmap mf;
 	struct hash_elem *e;
@@ -53,7 +53,7 @@ mmap_find_by_mapid (mapid mapid)
 
 //deletes mapid from file_desc
 bool
-mmap_delete_by_mapid (mapid mapid)
+mmap_delete_by_mapid (mapid_t mapid)
 {
 	struct struct_mmap *mf = mmap_find_by_mapid (mapid);
 	if (mf == NULL)
@@ -71,7 +71,7 @@ mmap_delete_by_mapid (mapid mapid)
 
 //Insert new mfilefrom given mapid
 void
-mmap_insert_by_mapid (mapid mapid, int fid, void *start_addr, void *end_addr)
+mmap_insert_by_mapid (mapid_t mapid, int fid, void *start_addr, void *end_addr)
 {
 	struct struct_mmap *mf = (struct struct_mmap *) malloc (sizeof (struct struct_mmap));
 	mf->fd = fid;
