@@ -279,6 +279,9 @@ thread_create (const char *name, int priority,
 
   /* Add to run queue. */
   thread_unblock (t);
+
+  //for vm
+  list_init (&t->mmap_files);
  
   old_level = intr_disable ();
   yield_to_max_priority_thread ();
