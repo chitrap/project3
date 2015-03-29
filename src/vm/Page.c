@@ -111,8 +111,8 @@ vm_load_new_page (struct struct_page *new_page, bool is_pinned){
 			memset (new_page->frame_page, 0, PGSIZE);
 	}
 	else{
-		load_swap_page (new_page->swap.swap_index, new_page->frame_page);
-  		free_swap_page (new_page->swap.swap_index);
+		load_swap_page (new_page->swap_data.swap_index, new_page->frame_page);
+  		free_swap_page (new_page->swap_data.swap_index);
 	}
 
 	if(!flag){
@@ -151,7 +151,7 @@ vm_unload(struct struct_page *p, void *fpage){
 	}
 	else if(&p->type == 2 || pagedir_is_dirty(p->pointer_to_pagedir, p->frame_page)){
 		p->type = 2;
-		p->swap.swap_index = store_swap_page(fpage);
+		p->swap_data.swap_index = store_swap_page(fpage);
 	}
 	lock_release(&page_unload_lock);
 
@@ -197,9 +197,9 @@ vm_free_this_page(struct struct_page *page){
 	}
 
 	if(page->type == 2 && page->is_page_loaded == false)
-		free_swap_page (page->swap_data.index);
+		free_swap_page (page->swap_data.swap_index);
 
-  pagedir_clear_page (page->pointer_to_pagedir, page->addr);
+  pagedir_clear_page (page->pointer_to_pagedir, page->address);
   free (page);
   --count;
 }

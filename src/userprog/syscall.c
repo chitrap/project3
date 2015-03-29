@@ -14,6 +14,11 @@
 #include "devices/shutdown.h"
 #include "lib/string.h"
 #include "devices/input.h"
+#include "vm/mmap.h"
+#include "vm/Page.h"
+#include "vm/frame.h"
+#include <inttypes.h>
+#include <list.h>
 
 static void syscall_handler (struct intr_frame *);
 struct lock file_lock; //lock for handing file sys
@@ -37,6 +42,7 @@ void get_arguments_from_stack (struct intr_frame *f, int *arg, int n);
 struct child_process* add_child (int pid);
 void validate_ptr (const void *addr);
 void close_all_files (void);
+static mapid_t assing_mapid (void);
 
 //File structre
 struct file_struct
@@ -415,13 +421,13 @@ syscall_handler (struct intr_frame *f UNUSED)
 		 case SYS_MMAP:
 		 {
 		 	get_arguments_from_stack(f, &arg[0], 2);
-		 	sys_mmap((int) args[0], (void *)args[1]);
+		 	f->eax = sys_mmap((int) arg[0], (void *)arg[1]);
 		 	break;
 		 }
 		 case SYS_MUNMAP:
 		 {
-		 	get_arguments_from_stack(f, &args[0], 1);
-		 	sys_munmap((mapid_t) args[0]);
+		 	get_arguments_from_stack(f, &arg[0], 1);
+		 	sys_munmap((mapid_t) arg[0]);
 		 	break;
 		 }
 
@@ -465,8 +471,8 @@ sys_mmap(int fd, void* addr){
         }
       else
         {
-          read_bytes = size;
-          zero_bytes = PGSIZE - size;
+          read_bytes = s;
+          zero_bytes = PGSIZE - s;
         }
   
       /* Fail if there is already a mapped page at the same address. */
@@ -481,7 +487,7 @@ sys_mmap(int fd, void* addr){
     }
 
   mapid_t mapid = assing_mapid();
-  mmap_insert_by_mapid (mapid, fd, addr, tmp_addr);
+  mmap_insert_by_mapid (mapid, fd, addr, addr_tmp);
 
   return mapid;
 
@@ -499,13 +505,13 @@ void
 sys_munmap (mapid_t mapid)
 {
   struct struct_mmap *mmap = mmap_find_by_mapid (mapid);
-  if (mf == NULL)
+  if (mmap == NULL)
     sys_exit (-1);
 
-  void *address = mmap->start_addr;
+  void *address = mmap->start_address;
 
   /* Free each page mapped in memory for the given file. */
-  for (;address < mmap->end_addr; address += PGSIZE)
+  for (;address < mmap->end_address; address += PGSIZE)
     {
       struct struct_page *p = NULL;
 
@@ -522,7 +528,7 @@ sys_munmap (mapid_t mapid)
           ASSERT (p->is_page_loaded && p->frame_page != NULL);
           free_frame (p->frame_page, p->pointer_to_pagedir);
         } 
-      vm_free_this_page (page);
+      vm_free_this_page (p);
     }
   mmap_delete_by_mapid(mapid);
 }

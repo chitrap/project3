@@ -1,6 +1,6 @@
 #include "vm/mmap.h"
 #include <hash.h>
-#include <lists.h>
+#include <list.h>
 #include "threads/malloc.h"
 #include "threads/thread.h"
 
@@ -12,7 +12,7 @@ static struct hash mmap_files;
 static unsigned
 mmap_hash (const struct hash_elem *mf_, void *aux UNUSED)
 {
-	const struct struct_mmap *mf = hash_enrty (mf_, struct struct_mmap, hash_elem);
+	const struct struct_mmap *mf = hash_entry (mf_, struct struct_mmap, hash_elem);
 	return hash_int ((unsigned) mf->mapid);
 }
 
@@ -21,8 +21,8 @@ static bool
 mmap_comparator (const struct hash_elem *a_,const struct hash_elem *b_,
 	             void *aux UNUSED)
 {
-	const struct struct_mmap *a = hash_enrty (a_, struct struct_mmap, hash_elem);
-	const struct struct_mmap *b = hash_enrty (b_, struct struct_mmap, hash_elem);
+	const struct struct_mmap *a = hash_entry (a_, struct struct_mmap, hash_elem);
+	const struct struct_mmap *b = hash_entry (b_, struct struct_mmap, hash_elem);
 
 	return a->mapid < b->mapid;
 }
@@ -32,7 +32,7 @@ void
 mmap_init (void)
 {
 	lock_init (&mmap_file_lock);
-	hash_init (&mmap_files, mmap_hash, mmap_comparator, NULL), 
+	hash_init (&mmap_files, mmap_hash, mmap_comparator, NULL); 
 }
 
 //find mmap for given mapid or null
@@ -48,7 +48,7 @@ mmap_find_by_mapid (mapid_t mapid)
 	{
 		return NULL;
 	}
-	return hash_enrty (e, struct struct_mmap, hash_elem);
+	return hash_entry (e, struct struct_mmap, hash_elem);
 }
 
 //deletes mapid from file_desc

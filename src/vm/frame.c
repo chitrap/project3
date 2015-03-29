@@ -24,6 +24,7 @@ static bool add_frame (void *pg);
 static bool find_page_to_evict(struct struct_frame *f);
 static void move_to_next_eviction(void);
 static void remove_evict_pointer(struct struct_frame *frame_to_evict);
+static void circular_evict(void);
 
 //Initializes frames hash, called from threads/init.c
 //from main function
@@ -338,7 +339,7 @@ get_next_page_for_eviction(void){
 	}
 
 	if(next_to_evict != NULL){
-		struct struct_frame *f = list_entry (next_to_evict, struct struct_frame, f_elem);
+		struct struct_frame *f = list_entry (next_to_evict, struct struct_frame, page_elem);
       	return f;
 	}
 
@@ -346,7 +347,7 @@ get_next_page_for_eviction(void){
 }
 
 static void
-circular_evict(){
+circular_evict(void){
 	struct struct_frame *frame_to_evict = NULL;
 
 	lock_acquire(&eviction_lock);

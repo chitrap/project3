@@ -28,7 +28,7 @@
 		struct
 		{
 			size_t swap_index;
-		}swap;
+		}swap_data;
 
 	};
 #endif
