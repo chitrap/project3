@@ -78,13 +78,13 @@ vm_add_new_zeroed_page (void *addr, bool writable)
 bool
 vm_load_new_page (struct struct_page *new_page, bool is_pinned){
 
-	lock_init(&page_load_lock);
+	lock_acquire(&page_load_lock);
 
 	if(new_page->type == 1 && new_page->file.block_id != -1){
 		new_page->frame_page = frame_lookup(new_page->file.block_id);
 	}
 
-	if(new_page->frame_page = NULL){
+	if(new_page->frame_page == NULL){
 		new_page->frame_page = get_frame(PAL_USER);
 	}
 
@@ -95,9 +95,11 @@ vm_load_new_page (struct struct_page *new_page, bool is_pinned){
 
 	if(new_page->type == 1){
 		//----put lock here to sync this block
+		sys_filelock(true);
 		file_seek(new_page->file.file_name, new_page->file.ofs);
 		size_t bytes_read = file_read(new_page->file.file_name, new_page->frame_page, new_page->file.read_bytes);
 		//-----remove lock from here
+		sys_filelock(false);
 
 		if(bytes_read != new_page->file.read_bytes){
 			free_frame(new_page->frame_page, new_page->pointer_to_pagedir);
@@ -144,9 +146,11 @@ vm_unload(struct struct_page *p, void *fpage){
 	if(&p->type == 1 && pagedir_is_dirty(p->pointer_to_pagedir, p->address) && file_writable(p->file.file_name) == false){
 		pin(fpage);
 		//---for sync put lock here
+		sys_filelock(true);
 		file_seek(p->file.file_name, p->file.ofs);
 		file_write(p->file.file_name, fpage, p->file.read_bytes);
 		//---remove lock from here
+		sys_filelock(false);
 		unpin(fpage);
 	}
 	else if(&p->type == 2 || pagedir_is_dirty(p->pointer_to_pagedir, p->frame_page)){

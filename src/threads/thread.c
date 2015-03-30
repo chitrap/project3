@@ -281,7 +281,6 @@ thread_create (const char *name, int priority,
   thread_unblock (t);
 
   //for vm
-  list_init (&t->mmap_files);
  
   old_level = intr_disable ();
   yield_to_max_priority_thread ();
@@ -370,12 +369,13 @@ thread_tid (void)
 void
 thread_exit (void) 
 {
+  printf("\nthread_exit called.....\n");
   ASSERT (!intr_context ());
 
 #ifdef USERPROG
   process_exit ();
 #endif
-
+  printf("\nnow schedule next.....\n");
   /* Remove thread from all threads list, set our status to dying,
      and schedule another process.  That process will destroy us
      when it calls thread_schedule_tail(). */
@@ -530,6 +530,7 @@ kernel_thread (thread_func *function, void *aux)
 
   intr_enable ();       /* The scheduler runs with interrupts off. */
   function (aux);       /* Execute the thread function. */
+  printf("\nexiting from kernel....\n");
   thread_exit ();       /* If function() returns, kill the thread. */
 }
 
@@ -582,6 +583,7 @@ init_thread (struct thread *t, const char *name, int priority)
   t->parent = running_thread ();
   
   
+  list_init (&t->mmap_files);
   list_init (&t->files_owned_list);
   t->file_desc = 2; //0-STDIN, 1-STDOUT
   t->load_status = false;

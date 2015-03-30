@@ -36,7 +36,7 @@ process_execute (const char *file_name)
 {
   char *fn_copy;
   tid_t tid;
-
+  printf("\nprocess executing..... %s\n", file_name);
   /* Make a copy of FILE_NAME.
      Otherwise there's a race between the caller and load(). */
   fn_copy = palloc_get_page (0);
@@ -58,10 +58,11 @@ process_execute (const char *file_name)
    }
    name[i] = '\0';
 
+   printf("\ncreating thread....\n");
    /* Create a new thread to execute FILE_NAME. */
   tid = thread_create (name, PRI_DEFAULT, start_process, fn_copy);
   //1.get child thread. 2. pass in child sema. 3. check if child load success  
-
+  printf("\n thread_created.... %d\n", tid);
   if ((int)tid == TID_ERROR)
    {
     palloc_free_page (fn_copy);
@@ -92,7 +93,7 @@ start_process (void *file_name_)
   char *fp;
   file_name = strtok_r(file_name, " ", &fp);
 
-
+  printf("\nstart process %s\n", file_name);
   /* Initialize interrupt frame and load executable. */
   memset (&if_, 0, sizeof if_);
   if_.gs = if_.fs = if_.es = if_.ds = if_.ss = SEL_UDSEG;
@@ -110,12 +111,15 @@ start_process (void *file_name_)
   /* If load failed, quit. */
   if (!success)
   {
+    //printf("\nsuccess done\n");
     palloc_free_page (file_name);
     thread_unblock (parent);
+    printf("\ncalling thread_exit....\n");
     thread_exit ();
   }
   else
   {
+    //printf("\nsuccess not done\n");
     /* Command successfully started. Put the arguments in the stack. */
    // parse_args_onto_stack(&if_.esp, command);
     palloc_free_page (file_name);
@@ -149,7 +153,7 @@ int
 process_wait (tid_t child_tid) 
 {
 #ifdef USERPROG
-
+  printf("\n thread %s %d waiting for child_tid %d\n", thread_current()->name, thread_current()->tid, child_tid);
   struct thread * this_thread = thread_current();
 
   enum intr_level old_level = intr_disable ();
@@ -176,6 +180,7 @@ process_wait (tid_t child_tid)
 
 #else
   /* In case USERPROG was not defined (you can ignore/not implement this part). */
+  printf("\n not a user prog...\n");
   return -1;
 #endif
 }
@@ -209,8 +214,11 @@ process_exit (void)
       pagedir_activate (NULL);
       pagedir_destroy (pd);
     }
+printf("\ncall sema up....\n");
 // As exiting we do sema up
 sema_up(&(thread_get_child_data (cur->parent, cur->tid))->s);
+
+printf("\nsema up done...\n");
 }
 
 /* Sets up the CPU for running user code in the current
@@ -403,8 +411,10 @@ load (const char *file_name, void (**eip) (void), void **esp,
 
   /* Set up stack. */
     //passing file stack pointer, file name, and pointer to name
-  if (!setup_stack (esp, file_name, fp))
-    goto done;
+  if (!setup_stack (esp, file_name, fp)){
+    	printf("\nsetup_failed....\n");
+	goto done;
+  }
 
   /* Start address. */
   *eip = (void (*) (void)) ehdr.e_entry;
@@ -484,10 +494,11 @@ static bool
 load_segment (struct file *file, off_t ofs, uint8_t *upage,
               uint32_t read_bytes, uint32_t zero_bytes, bool writable) 
 {
+  printf("\nin load segment.....\n");
   ASSERT ((read_bytes + zero_bytes) % PGSIZE == 0);
   ASSERT (pg_ofs (upage) == 0);
   ASSERT (ofs % PGSIZE == 0);
-
+  printf("\nassertions passed\n");
   //file_seek (file, ofs);
   off_t file_ofs = ofs;
   while (read_bytes > 0 || zero_bytes > 0) 
@@ -502,16 +513,22 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
       off_t block_id = -1;
       //************ Add code for sharing frames ********
       //-------------
-      
-      if (writable == false)
+      printf("\n writable: %d\n", writable);      
+      if (writable == false){
+        printf("\ncalling inode..\n");
         block_id = inode_get_block_number (file_get_inode (file), file_ofs);
+        printf("\ninode done..\n");
+      }
 
       struct struct_page *page = NULL;
+      printf("\ncall add_new_page...\n");
       page = vm_add_new_page (upage, file, file_ofs, page_read_bytes,
                               page_zero_bytes, writable, block_id);
 
+      printf("\nnew page done..\n");
       if (page == NULL)
        {
+	printf("\nreturning false...\n");
         return false;
        }
 
@@ -556,6 +573,7 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
       file_ofs +=PGSIZE;
     }
     file_seek(file, ofs);
+  printf("\nreturning true..\n");
   return true;
 }
 
@@ -565,16 +583,20 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
 static bool
 setup_stack (void **esp, const char *file_name, char **save_ptr) 
 {
-
+ printf("\nsetting up stack\n");
 //mapping zeroed page
   struct struct_page *page = NULL;
+  printf("add zeroed page....\n");
   page = vm_add_new_zeroed_page ( ((uint8_t *) PHYS_BASE) - PGSIZE, true );
+  printf("done done....\n");
   if (page == NULL)
    {
     return false;
    }
    *esp = PHYS_BASE;
-   vm_load_new_page (page, false);
+  printf("\nloading new page.....\n");
+  vm_load_new_page (page, false);
+  printf("\n loaded....\n");
 
   uint8_t *kpage;
   bool success = true;
@@ -597,6 +619,7 @@ setup_stack (void **esp, const char *file_name, char **save_ptr)
     }
     */
   //----------
+  printf("\nsetting actual stack\n");
   const void *user_stack_bottom = *esp - PGSIZE;
   char *token;
   int length_token = 0;

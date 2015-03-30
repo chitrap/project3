@@ -118,7 +118,8 @@ sys_exit (int status)
         {
            e = list_begin (&current->mmap_files);
            sys_munmap ( list_entry (e, struct struct_mmap, thread_elem)->mapid );
-        } 
+        }
+	printf("\nthread_exit from sys_exit\n"); 
 	thread_exit();	 
 }
 
@@ -427,7 +428,7 @@ syscall_handler (struct intr_frame *f UNUSED)
 	//validates the pointer
 	validate_ptr((const void *) f->esp);
 	validate_page((const void *) f->esp);
-	
+        printf("\n esp: %d\n",*(int *)f->esp);	
 	//store value of esp for read and write
 	esp_value = f->esp;
 	//switch for diff system calls
@@ -671,4 +672,10 @@ close_all_files (void)
    }
 }
 
-
+void
+sys_filelock(int flag){
+if(flag)
+	lock_acquire(&file_lock);
+else
+	lock_release(&file_lock);
+}

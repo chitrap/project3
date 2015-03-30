@@ -143,6 +143,7 @@ main (void)
 
   /* Finish up. */
   shutdown ();
+  printf("\nexiting thread....\n");
   thread_exit ();
 }
 

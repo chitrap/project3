@@ -47,13 +47,13 @@ pagedir_destroy (uint32_t *pd)
           //-------------
           //Changed, get page entry from pte and free that page  
           {
-            free_vm_frames (pte_get_page (*pte));
+            free_frame (pte_get_page (*pte), pd);
           }
-          free_vm_frames (pt);
+          free_frame (pt, pd);
       }
   //----
   //Changed function for freeing    
-  free_vm_frames (pd);
+  free_frame (pd, pd);
 }
 
 /* Returns the address of the page table entry for virtual

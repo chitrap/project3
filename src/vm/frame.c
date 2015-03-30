@@ -16,9 +16,9 @@ static struct list_elem *next_to_evict;
 
 unsigned frame_hash (const struct hash_elem *, void *);
 bool frame_comparator (const struct hash_elem *, const struct hash_elem *, void *);
-static bool delete_frame (void *);
+//static bool delete_frame (struct struct_frame *f);
 static struct struct_frame *find_frame (void *);
-static bool delete_frame (void *pg);
+static void delete_frame (struct struct_frame *f);
 static struct struct_frame * find_frame (void *pg);
 static bool add_frame (void *pg);
 static bool find_page_to_evict(struct struct_frame *f);
@@ -95,22 +95,22 @@ frame_comparator (const struct hash_elem *first_, const struct hash_elem *second
 
 
 //Frees resources
-void
-free_vm_frames (void *pg)
-{
-	delete_frame (pg);
-	palloc_free_page (pg);
-}
+//void
+//free_vm_frames (void *pg)
+//{
+//	delete_frame (pg);
+//	palloc_free_page (pg);
+//}
 
 //Deletes a frame, free its memory
-static bool
-delete_frame (void *pg)
+static void
+delete_frame (struct struct_frame *f)
 {
-	struct struct_frame *f = find_frame (pg);
-	if (f == NULL)
-	 {
-	 	return false;
-	 }
+	//struct struct_frame *f = find_frame (pg);
+	//if (f == NULL)
+	 //{
+	// 	return false;
+	 //}
 
 	 lock_acquire (&frame_lock);
 	 remove_evict_pointer(f);
@@ -119,7 +119,7 @@ delete_frame (void *pg)
 	 free (f);
 	 lock_release (&frame_lock);
 
-	 return true;
+	 //return true;
 }
 
 
@@ -209,7 +209,8 @@ get_frame (enum palloc_flags flags)
 	 }
 	 else
 	  {
-	  	#ifndef vm
+	  	#ifndef VM
+			printf("\nsys_exit from frame...\n");
 	  		sys_exit (-1);
 	  	#endif
 	  	//PANIC ("Eviction needed !");	
@@ -237,7 +238,8 @@ frame_lookup(off_t block_id)
 		struct list_elem *e = list_begin(&f->frame_pages);
 		struct struct_page *fpage = list_entry(e, struct struct_page, f_elem);
 		if(fpage->type == 1 && fpage->file.block_id== block_id){
-			address = f->vaddr;
+			address = f->page;
+			f->pin = 1;
 		}
 
 		lock_release(&f->llock);
@@ -323,7 +325,7 @@ find_page_to_evict(struct struct_frame *f){
 	for(e=list_begin(&f->frame_pages); e != list_end(&f->frame_pages); e = list_next(e)){
 		struct struct_page *p = list_entry(e, struct struct_page, f_elem);
 
-		if (pagedir_is_accessed (p->pointer_to_pagedir, p->address) )
+	if (pagedir_is_accessed (p->pointer_to_pagedir, p->address) )
         {
           pagedir_set_accessed (p->pointer_to_pagedir, p->address, false);
           return false;
@@ -367,7 +369,7 @@ circular_evict(void){
 
 	lock_release(&frame_lock);
 	lock_release(&eviction_lock);
-	free_frame(frame_to_evict->vaddr, NULL);
+	free_frame(frame_to_evict->page, NULL);
 }
 
 
