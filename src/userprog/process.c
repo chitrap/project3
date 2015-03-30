@@ -26,6 +26,7 @@
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp,
                   char ** fp);
+static int set_up_user_prog_stack (void **esp, char **save_ptr, char *token);
 //struct lock file_lock;
 /* Starts a new thread running a user program loaded from
    FILENAME.  The new thread may be scheduled (and may even exit)
@@ -111,6 +112,7 @@ start_process (void *file_name_)
   /* If load failed, quit. */
   if (!success)
   {
+    
     //printf("\nsuccess done\n");
     palloc_free_page (file_name);
     thread_unblock (parent);
@@ -119,6 +121,7 @@ start_process (void *file_name_)
   }
   else
   {
+    set_up_user_prog_stack (&if_.esp, &fp, file_name);
     //printf("\nsuccess not done\n");
     /* Command successfully started. Put the arguments in the stack. */
    // parse_args_onto_stack(&if_.esp, command);
@@ -137,6 +140,69 @@ start_process (void *file_name_)
      and jump to it. */
   asm volatile ("movl %0, %%esp; jmp intr_exit" : : "g" (&if_) : "memory");
   NOT_REACHED ();
+}
+
+static int
+set_up_user_prog_stack (void **esp, char **save_ptr, char* token) {
+  int args_pushed;
+  int argc = 0;
+  void* stack_pointer;
+
+  stack_pointer = *esp;
+
+  /* Tokenise file name and push each token on the stack. */
+  do                                                                            
+     {                                                                           
+       size_t len = strlen (token) + 1;                                          
+       stack_pointer = (void*) (((char*) stack_pointer) - len);                  
+       strlcpy ((char*)stack_pointer, token, len);                               
+       argc++;                                   
+       /* Don't push anymore arguments if maximum allowed 
+          have already been pushed. */
+       if (PHYS_BASE - stack_pointer > MAX_ARGS_SIZE)
+          return 0;                              
+       token = strtok_r (NULL, " ", save_ptr);                                  
+     } while (token != NULL);
+  
+  char *arg_ptr = (char*) stack_pointer;                                      
+  
+  /* Round stack pionter down to a multiple of 4. */
+  stack_pointer = (void*) (((intptr_t) stack_pointer) & 0xfffffffc);
+
+  /* Push null sentinel. */
+  stack_pointer = (((char**) stack_pointer) - 1);
+  *((char*)(stack_pointer)) = 0;
+
+  /* Push pointers to arguments. */
+  args_pushed = 0;                                                              
+  while (args_pushed < argc)                                                    
+     {                                                                           
+       while (*(arg_ptr - 1) != '\0')                                            
+         ++arg_ptr;                                                              
+       stack_pointer = (((char**) stack_pointer) - 1);                           
+       *((char**) stack_pointer) = arg_ptr;                                      
+       ++args_pushed;    
+       ++arg_ptr;                                                        
+     }
+
+  /* Push argv. */
+  char** first_arg_pointer = (char**) stack_pointer;
+  stack_pointer = (((char**) stack_pointer) - 1);
+  *((char***) stack_pointer) = first_arg_pointer;
+
+
+  /* Push argc. */
+  int* stack_int_pointer = (int*) stack_pointer;
+  --stack_int_pointer;
+  *stack_int_pointer = argc;
+  stack_pointer = (void*) stack_int_pointer;
+
+  /* Push null sentinel. */
+  stack_pointer = (((void**) stack_pointer) - 1);
+  *((void**)(stack_pointer)) = 0;
+
+  *esp = stack_pointer;
+  return 1;
 }
 
 
@@ -599,10 +665,12 @@ setup_stack (void **esp, const char *file_name, char **save_ptr)
   printf("\n loaded....\n");
 
   uint8_t *kpage;
+  return true;
+  /*
   bool success = true;
 
 //--------
-  /*
+  / *
   //kpage = palloc_get_page (PAL_USER | PAL_ZERO);
   kpage = get_frame (PAL_USER | PAL_ZERO);
   if (kpage != NULL) 
@@ -617,7 +685,7 @@ setup_stack (void **esp, const char *file_name, char **save_ptr)
         free_vm_frames (kpage);
       }
     }
-    */
+    * /
   //----------
   printf("\nsetting actual stack\n");
   const void *user_stack_bottom = *esp - PGSIZE;
@@ -691,6 +759,7 @@ setup_stack (void **esp, const char *file_name, char **save_ptr)
 
   
   return success;
+  */
 }
 
 
