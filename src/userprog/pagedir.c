@@ -49,6 +49,9 @@ pagedir_destroy (uint32_t *pd)
           {
             free_frame (pte_get_page (*pte), pd);
           }
+	  else if(*pte != 0){
+		vm_free_this_page((struct struct_page *)*pte);
+	  }
           free_frame (pt, pd);
       }
   //----
@@ -164,9 +167,16 @@ pagedir_clear_page (uint32_t *pd, void *upage)
   ASSERT (is_user_vaddr (upage));
 
   pte = lookup_page (pd, upage, false);
+  /*
   if (pte != NULL && (*pte & PTE_P) != 0)
     {
       *pte &= ~PTE_P;
+      invalidate_pagedir (pd);
+    }
+  */
+  if (pte != NULL)
+    {
+      *pte &= 0;
       invalidate_pagedir (pd);
     }
 }

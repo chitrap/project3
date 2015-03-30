@@ -119,7 +119,7 @@ sys_exit (int status)
            e = list_begin (&current->mmap_files);
            sys_munmap ( list_entry (e, struct struct_mmap, thread_elem)->mapid );
         }
-	printf("\nthread_exit from sys_exit\n"); 
+	//printf("\nthread_exit from sys_exit\n"); 
 	thread_exit();	 
 }
 
@@ -423,12 +423,13 @@ sys_write (int file_desc, const void *buffer, unsigned size)
 static void
 syscall_handler (struct intr_frame *f UNUSED) 
 {
+	//printf("\nsyscall handler...\n");
 	int arg[3];  //maximum 3 args are required by a syscall
 
 	//validates the pointer
 	validate_ptr((const void *) f->esp);
 	validate_page((const void *) f->esp);
-        printf("\n esp: %d\n",*(int *)f->esp);	
+        //printf("\n esp: %d\n",*(int *)f->esp);	
 	//store value of esp for read and write
 	esp_value = f->esp;
 	//switch for diff system calls

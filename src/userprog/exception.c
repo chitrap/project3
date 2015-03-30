@@ -95,7 +95,7 @@ kill (struct intr_frame *f)
       intr_dump_frame (f);
       //thread_exit (); 
       //Adding syscall exit
-      printf("\nexception sys_exit\n");
+      //printf("\nexception sys_exit\n");
       sys_exit (-1);
 
     case SEL_KCSEG:
@@ -111,7 +111,7 @@ kill (struct intr_frame *f)
          kernel. */
       printf ("Interrupt %#04x (%s) in unknown segment %04x\n",
              f->vec_no, intr_name (f->vec_no), f->cs);
-      printf("\nexiting from exception....\n");
+      //printf("\nexiting from exception....\n");
       thread_exit ();
     }
 }
@@ -161,7 +161,7 @@ page_fault (struct intr_frame *f)
   //Get kernel address in user mode
   if (user && !is_user_vaddr (fault_addr))
    {
-    printf("\nsys_exit from exception 1.....\n");
+    //printf("\nsys_exit from exception 1.....\n");
     sys_exit (-1);
    }
 
@@ -175,7 +175,7 @@ page_fault (struct intr_frame *f)
    if (page != NULL && write && !page->is_writable)
    {
 
-      printf("\nsys_exit from exception 2.....\n");
+      //printf("\nsys_exit from exception 2.....\n");
       sys_exit (-1);
    }
 
@@ -184,7 +184,8 @@ page_fault (struct intr_frame *f)
       if (!vm_load_new_page (page, false))
        {
 
-        printf("\nsys_exit from exception 3.....\n");
+        ///printf("\nsys_exit from exception 3.....\n");
+	//printf("\ncurrent thread is: %s %d\n",thread_current()->name, thread_current()->tid);
         sys_exit (-1);
        }
        return;
@@ -194,7 +195,7 @@ page_fault (struct intr_frame *f)
         if (!vm_add_zeroed_page_on_stack (fault_page, false))
          {
 
-    	  printf("\nsys_exit from exception 4.....\n");
+    	  //printf("\nsys_exit from exception 4.....\n");
           sys_exit (-1);
          }
          return;
@@ -202,7 +203,7 @@ page_fault (struct intr_frame *f)
      else if (user || not_present)
       {
 
-        printf("\nsys_exit from exception 5.....%d, %d\n", user, not_present);
+        //printf("\nsys_exit from exception 5.....%d, %d\n", user, not_present);
         sys_exit (-1);
       }
 

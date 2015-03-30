@@ -27,6 +27,7 @@ static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp,
                   char ** fp);
 static int set_up_user_prog_stack (void **esp, char **save_ptr, char *token);
+static bool install_page (void *upage, void *kpage, bool writable);
 //struct lock file_lock;
 /* Starts a new thread running a user program loaded from
    FILENAME.  The new thread may be scheduled (and may even exit)
@@ -37,7 +38,7 @@ process_execute (const char *file_name)
 {
   char *fn_copy;
   tid_t tid;
-  printf("\nprocess executing..... %s\n", file_name);
+  //printf("\nprocess executing..... %s\n", file_name);
   /* Make a copy of FILE_NAME.
      Otherwise there's a race between the caller and load(). */
   fn_copy = palloc_get_page (0);
@@ -59,23 +60,33 @@ process_execute (const char *file_name)
    }
    name[i] = '\0';
 
-   printf("\ncreating thread....\n");
+   //printf("\ncreating thread....\n");
    /* Create a new thread to execute FILE_NAME. */
   tid = thread_create (name, PRI_DEFAULT, start_process, fn_copy);
   //1.get child thread. 2. pass in child sema. 3. check if child load success  
-  printf("\n thread_created.... %d\n", tid);
+  //printf("\n thread_created.... %d\n", tid);
   if ((int)tid == TID_ERROR)
    {
     palloc_free_page (fn_copy);
    }
   else 
    {
+    //printf("\n in else part\n");
     enum intr_level old_level = intr_disable();
+    //printf("\n blocking thread....\n");
     thread_block();
+    //struct thread *t = thread_by_tid(tid);
+    //struct child_thread_data *ct = thread_get_child_data(thread_current(), tid);
+    //sema_down(&ct->s);
+    //printf("\ncurrent thread after block: %d %s\n", thread_current()->tid, thread_current()->name);
+    //printf("\nblocked.....\n");
     intr_set_level(old_level);
-    if (thread_current()->child_create_error)
+    if (thread_current()->child_create_error){
       tid = TID_ERROR;
+      printf("\nTID_ERROR\n");
+    }
    }
+   //printf("\nreturning tid..... %d\n", tid);
    return tid;  
 }
 
@@ -94,7 +105,7 @@ start_process (void *file_name_)
   char *fp;
   file_name = strtok_r(file_name, " ", &fp);
 
-  printf("\nstart process %s\n", file_name);
+  //printf("\nstart process %s\n", file_name);
   /* Initialize interrupt frame and load executable. */
   memset (&if_, 0, sizeof if_);
   if_.gs = if_.fs = if_.es = if_.ds = if_.ss = SEL_UDSEG;
@@ -113,20 +124,26 @@ start_process (void *file_name_)
   if (!success)
   {
     
-    //printf("\nsuccess done\n");
+    //printf("\nsuccess not done\n");
     palloc_free_page (file_name);
     thread_unblock (parent);
-    printf("\ncalling thread_exit....\n");
+    //sema_up(&(thread_get_child_data (parent, thread_current()->tid))->s);
+    //printf("\ncalling thread_exit....\n");
     thread_exit ();
   }
   else
   {
+    //printf("\n settign up\n");
     set_up_user_prog_stack (&if_.esp, &fp, file_name);
-    //printf("\nsuccess not done\n");
+    //printf("\nsetup done\n");
     /* Command successfully started. Put the arguments in the stack. */
    // parse_args_onto_stack(&if_.esp, command);
     palloc_free_page (file_name);
+    //printf("\n unvlocking thread....\n");
     thread_unblock (parent);
+    //sema_up(&(thread_get_child_data (parent, thread_current()->tid))->s);
+    //sema_up(&thread_current()->s);
+    //printf("\nunblocked..\n");
   }
   
   //1.if success sema up, wake up the parent waiting thread.
@@ -159,7 +176,7 @@ set_up_user_prog_stack (void **esp, char **save_ptr, char* token) {
        argc++;                                   
        /* Don't push anymore arguments if maximum allowed 
           have already been pushed. */
-       if (PHYS_BASE - stack_pointer > MAX_ARGS_SIZE)
+       if (PHYS_BASE - stack_pointer > 4096)
           return 0;                              
        token = strtok_r (NULL, " ", save_ptr);                                  
      } while (token != NULL);
@@ -218,8 +235,9 @@ set_up_user_prog_stack (void **esp, char **save_ptr, char* token) {
 int
 process_wait (tid_t child_tid) 
 {
+//printf("\nprocess wait...\n");
 #ifdef USERPROG
-  printf("\n thread %s %d waiting for child_tid %d\n", thread_current()->name, thread_current()->tid, child_tid);
+  //printf("\n thread %s %d waiting for child_tid %d\n", thread_current()->name, thread_current()->tid, child_tid);
   struct thread * this_thread = thread_current();
 
   enum intr_level old_level = intr_disable ();
@@ -227,16 +245,20 @@ process_wait (tid_t child_tid)
   struct child_thread_data * child_data = thread_get_child_data (this_thread, child_tid);
   if (child_data == NULL)
   {
+    //printf("\nchild data null\n");
     intr_set_level (old_level);
     return -1;
   }
 
   struct thread * child = thread_by_tid(child_tid);
 
+  //printf("\ncheck child\n");
   if (child != NULL)
   {
+    //printf("\nsema down.....\n");
     sema_down(&child_data->s);
   }
+  //printf("\n run parent again...\n");
 
   int retval = child_data->exit_status;
   list_remove (&child_data->elem);
@@ -246,7 +268,7 @@ process_wait (tid_t child_tid)
 
 #else
   /* In case USERPROG was not defined (you can ignore/not implement this part). */
-  printf("\n not a user prog...\n");
+  //printf("\n not a user prog...\n");
   return -1;
 #endif
 }
@@ -280,11 +302,13 @@ process_exit (void)
       pagedir_activate (NULL);
       pagedir_destroy (pd);
     }
-printf("\ncall sema up....\n");
+//printf("\ncall sema up....\n");
 // As exiting we do sema up
-sema_up(&(thread_get_child_data (cur->parent, cur->tid))->s);
+struct child_thread_data *ct = thread_get_child_data (cur->parent, cur->tid);
+while(!list_empty(&ct->s.waiters))
+	sema_up(&ct->s);
 
-printf("\nsema up done...\n");
+//printf("\nsema up done...\n");
 }
 
 /* Sets up the CPU for running user code in the current
@@ -478,7 +502,7 @@ load (const char *file_name, void (**eip) (void), void **esp,
   /* Set up stack. */
     //passing file stack pointer, file name, and pointer to name
   if (!setup_stack (esp, file_name, fp)){
-    	printf("\nsetup_failed....\n");
+    	//printf("\nsetup_failed....\n");
 	goto done;
   }
 
@@ -556,6 +580,7 @@ validate_segment (const struct Elf32_Phdr *phdr, struct file *file)
 
    Return true if successful, false if a memory allocation error
    or disk read error occurs. */
+/*
 static bool
 load_segment (struct file *file, off_t ofs, uint8_t *upage,
               uint32_t read_bytes, uint32_t zero_bytes, bool writable) 
@@ -569,15 +594,15 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
   off_t file_ofs = ofs;
   while (read_bytes > 0 || zero_bytes > 0) 
     {
-      /* Calculate how to fill this page.
+      / * Calculate how to fill this page.
          We will read PAGE_READ_BYTES bytes from FILE
-         and zero the final PAGE_ZERO_BYTES bytes. */
+         and zero the final PAGE_ZERO_BYTES bytes. * /
       size_t page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;
       size_t page_zero_bytes = PGSIZE - page_read_bytes;
 
       //-------------
       off_t block_id = -1;
-      //************ Add code for sharing frames ********
+      // ************ Add code for sharing frames ********
       //-------------
       printf("\n writable: %d\n", writable);      
       if (writable == false){
@@ -598,7 +623,7 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
         return false;
        }
 
-      /* Get a page of memory. * /
+      / * Get a page of memory. * /
       //-------
       //uint8_t *kpage = palloc_get_page (PAL_USER);
       uint8_t *kpage = get_frame (PAL_USER);
@@ -632,7 +657,7 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
           return false;
         }
 
-      / * Advance. */
+      / * Advance. * /
       read_bytes -= page_read_bytes;
       zero_bytes -= page_zero_bytes;
       upage += PGSIZE;
@@ -642,27 +667,73 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
   printf("\nreturning true..\n");
   return true;
 }
+*/
 
+static bool
+load_segment (struct file *file, off_t ofs, uint8_t *upage,
+              uint32_t read_bytes, uint32_t zero_bytes, bool writable) 
+{
+  ASSERT ((read_bytes + zero_bytes) % PGSIZE == 0);
+  ASSERT (pg_ofs (upage) == 0);
+  ASSERT (ofs % PGSIZE == 0);
+
+  file_seek (file, ofs);
+  while (read_bytes > 0 || zero_bytes > 0) 
+    {
+      /* Calculate how to fill this page.
+         We will read PAGE_READ_BYTES bytes from FILE
+         and zero the final PAGE_ZERO_BYTES bytes. */
+      size_t page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;
+      size_t page_zero_bytes = PGSIZE - page_read_bytes;
+
+      /* Get a page of memory. */
+      //uint8_t *kpage = palloc_get_page (PAL_USER);
+      uint8_t *kpage = get_frame (PAL_USER);
+      if (kpage == NULL)
+        return false;
+
+      /* Load this page. */
+      if (file_read (file, kpage, page_read_bytes) != (int) page_read_bytes)
+        {
+          palloc_free_page (kpage);
+          return false; 
+        }
+      memset (kpage + page_read_bytes, 0, page_zero_bytes);
+
+      /* Add the page to the process's address space. */
+      if (!install_page (upage, kpage, writable)) 
+        {
+          palloc_free_page (kpage);
+          return false; 
+        }
+
+      /* Advance. */
+      read_bytes -= page_read_bytes;
+      zero_bytes -= page_zero_bytes;
+      upage += PGSIZE;
+    }
+  return true;
+}
 
 /* Create a minimal stack by mapping a zeroed page at the top of
    user virtual memory. */
 static bool
 setup_stack (void **esp, const char *file_name, char **save_ptr) 
 {
- printf("\nsetting up stack\n");
+ //printf("\nsetting up stack\n");
 //mapping zeroed page
   struct struct_page *page = NULL;
-  printf("add zeroed page....\n");
+ // printf("add zeroed page....\n");
   page = vm_add_new_zeroed_page ( ((uint8_t *) PHYS_BASE) - PGSIZE, true );
-  printf("done done....\n");
+  //printf("done done....\n");
   if (page == NULL)
    {
     return false;
    }
    *esp = PHYS_BASE;
-  printf("\nloading new page.....\n");
+  //printf("\nloading new page.....\n");
   vm_load_new_page (page, false);
-  printf("\n loaded....\n");
+  //printf("\n loaded....\n");
 
   uint8_t *kpage;
   return true;
@@ -772,7 +843,6 @@ setup_stack (void **esp, const char *file_name, char **save_ptr)
    with palloc_get_page().
    Returns true on success, false if UPAGE is already mapped or
    if memory allocation fails. */
-#ifndef VM
 static bool
 install_page (void *upage, void *kpage, bool writable)
 {
@@ -783,4 +853,3 @@ install_page (void *upage, void *kpage, bool writable)
   return (pagedir_get_page (t->pagedir, upage) == NULL
           && pagedir_set_page (t->pagedir, upage, kpage, writable));
 }
-#endif
